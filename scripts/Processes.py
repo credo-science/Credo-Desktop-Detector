@@ -130,7 +130,7 @@ class PingScheduler(multiprocessing.Process):
             except:
                 self.terminate()
             self.current_time = int(datetime.datetime.utcnow().timestamp()*1000)
-            print(self.current_time - self.temp_time)
+            # print(self.current_time - self.temp_time)
             pingFrame = self.ping_template(self.temp_time, 0, self.current_time - self.temp_time, self.device_id,
                                           self.device_type, self.device_model, self.system_version, self.app_version)
             self.task_queue.put(pingFrame)
