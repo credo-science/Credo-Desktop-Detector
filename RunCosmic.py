@@ -7,26 +7,28 @@
 @todo replace sleeps to timers
 @todo time to UTC
 """
-import json
+import argparse
 import getpass
+import hashlib
+import json
+import multiprocessing
 import os
 import platform
-import time
-import hashlib
 import random
-import multiprocessing
 import signal
-import argparse
+import time
 
 # INSECURE
 import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Local libs
 from scripts.CosmicWatchBySpencerAxani import CosmicWatch, sys
-from scripts.DataTemplates import makeDataFrame, jsonTemplate
+from scripts.DataTemplates import jsonTemplate, makeDataFrame
+from scripts.Processes import PingProcess, PingScheduler, Scheduler, datetime
 from scripts.RequestTemplates import httpRequest
-from scripts.Processes import Scheduler, PingProcess, PingScheduler, datetime
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 class Klasa():
     # APPLICATION SETUP
@@ -36,14 +38,18 @@ class Klasa():
         self.longitude = 50.0922
         self.latitude = 19.9148
         parser = argparse.ArgumentParser()
-        parser.add_argument("-l","--latitude", help="latitude", type=float)
-        parser.add_argument("-o","--longitude", help="longitude", type=float)
-        parser.add_argument("-a","--altitude", help="altitude", type=float)
+        parser.add_argument("-l", "--latitude", help="latitude", type=float)
+        parser.add_argument("-o", "--longitude", help="longitude", type=float)
+        parser.add_argument("-a", "--altitude", help="altitude", type=float)
 
-        parser.add_argument("-i","--interval", help="interval in seconds between each pack of JSON data", type=int, default=600)
-        parser.add_argument("-s","--server", help="adress of CREDO API", type=str, default="https://api.credo.science")
-        parser.add_argument("-g","--gui", help="turns on GUI", action="store_true", default=False)
-        parser.add_argument("-p","--port", help="select port", type=str, default="600")
+        parser.add_argument(
+            "-i", "--interval", help="interval in seconds between each pack of JSON data", type=int, default=600)
+        parser.add_argument("-s", "--server", help="adress of CREDO API",
+                            type=str, default="https://api.credo.science")
+        parser.add_argument("-g", "--gui", help="turns on GUI",
+                            action="store_true", default=False)
+        parser.add_argument(
+            "-p", "--port", help="select port", type=str, default="600")
         args = parser.parse_args()
 
         """Actions for variables"""
@@ -51,41 +57,41 @@ class Klasa():
         self.longitude = args.longitude
         self.latitude = args.latitude
 
-
         self.GUI = args.gui
-        #if args.gui == True:
+        # if args.gui == True:
         print(f"GUI: {args.gui}")
 
-        #if args.port:
+        # if args.port:
         self.PORT = args.port
         print(f"Selected port: {args.port}")
-        #else:
+        # else:
         #    self.PORT = 600
         #    print(f"\tPort: {self.PORT}")
 
-        #if args.interval:
+        # if args.interval:
         self.TIME_INTERVAL = args.interval
         print(f"Selected: {args.interval} interval")
-        #else:
+        # else:
         #    self.TIME_INTERVAL = 600
         #    print(f"\tTime interval: {self.TIME_INTERVAL}")
 
-        #if args.server:
+        # if args.server:
         self.SERVER = args.server
         print(f"Selected: {args.server} server")
-        #else:
+        # else:
         #    self.SERVER = "https://api.credo.science"
         #    print(f"\tDefault server: {self.SERVER}")
 
-        #print("Args:")
-        #print(args)
+        # print("Args:")
+        # print(args)
 
         # Constant App parameters
         self.config_file_name = '.CosmicConfig.json'
         self.distro, self.version, self.kernel = platform.linux_distribution()
         self.device_type = "Desktop"
         self.device_model = "CosmicWatch"
-        self.system_version = platform.system() + platform.release() + " " + self.distro + self.version
+        self.system_version = platform.system() + platform.release() + " " + \
+            self.distro + self.version
         self.app_version = 0.2
 
         # variables for GUI version
@@ -99,11 +105,12 @@ class Klasa():
         self.send_data_process = None
 
     """Functions"""
+
     def signalHandler(self, sig, frame):
         self.Detector.killProcess()
-        # schedule_pings must end before request_pings_process 
-        self.schedule_pings.killProcess() #send last ping to be done
-        self.request_pings_process.killProcess() #send last pings and terminates
+        # schedule_pings must end before request_pings_process
+        self.schedule_pings.killProcess()  # send last ping to be done
+        self.request_pings_process.killProcess()  # send last pings and terminates
         self.send_data_process.killProcess()
         print('You pressed Ctrl+C!')
         sys.exit(0)
@@ -161,7 +168,7 @@ class Klasa():
         template = jsonTemplate("Register")
         self.device_id = self.generateUniqueID(
             self.device_model, self.device_type, user_name)
-        return template(email, user_name, display_Name, password, team, language, 
+        return template(email, user_name, display_Name, password, team, language,
                         self.device_id, self.device_type, self.device_model, self.system_version, self.app_version)
 
     def Init(self):
@@ -176,25 +183,25 @@ class Klasa():
             if self.errors(register_result[0], register_result[2]) == False:
                 del registration_template['password']
                 config_file.write(json.dumps(registration_template, indent=4))
-                config_file.close
+                config_file.close()
                 config = self.ifConfigExist()
             elif json.loads(register_result[2])['message'] == "Registration failed. Reason: User with given username or email already exists.":
                 del registration_template['password']
                 config_file.write(json.dumps(registration_template, indent=4))
-                config_file.close
+                config_file.close()
                 config = self.ifConfigExist()
                 print('Config file recreated!')
         else:
-            file_ = open(self.config_file_name).read()
-            self.device_id = json.loads(file_)['device_id']
-            # file_.close()
+            file_ = open(self.config_file_name)
+            self.device_id = str(json.loads(file_.read())["device_id"])
+            file_.close()
 
     # Loggin into server
     def LogIn(self, username, password):
         """Return Auth Token -- authentication_token"""
         template = jsonTemplate("Login")
         login_template = template(username, password, self.device_id, self.device_type,
-                                 self.device_model, self.system_version, self.app_version)
+                                  self.device_model, self.system_version, self.app_version)
 
         login_request = httpRequest(self.SERVER, "Login")
         login_result = login_request(login_template)
@@ -221,14 +228,15 @@ class Klasa():
         print("Press ctl+c to terminate process")
         signal.signal(signal.SIGINT, self.signalHandler)
 
-        # Create data scheduler process 
+        # Create data scheduler process
         self.send_data_process = Scheduler(self.TIME_INTERVAL, tasks, self.device_id, self.device_type, self.device_model,
-                                     self.system_version, self.app_version, send_request, self.authentication_token)
+                                           self.system_version, self.app_version, send_request, self.authentication_token)
 
         # Create ping scheduler processes
         self.schedule_pings = PingScheduler(self.TIME_INTERVAL, ping_tasks, jsonTemplate("Ping"), ping_request, self.device_id,
                                             self.device_type, self.device_model, self.system_version, self.app_version)
-        self.request_pings_process = PingProcess(self.TIME_INTERVAL, ping_tasks, ping_request, self.authentication_token)
+        self.request_pings_process = PingProcess(
+            self.TIME_INTERVAL, ping_tasks, ping_request, self.authentication_token)
 
         # Start Processes
         self.schedule_pings.start(), self.request_pings_process.start()
@@ -241,7 +249,7 @@ class Klasa():
                 # print(f"recived particle no.: {counter}")
                 amplitude = (str(data).split(" ")[3])
                 dframe_template = makeDataFrame(1, self.altitude, self.latitude, self.longitude, "manual", int(datetime.datetime.utcnow().timestamp()*1000),
-                 amplitude, None, None, None)  # data framme
+                                                amplitude, None, None, None)  # data framme
                 # print(str(datetime.datetime.utcnow().timestamp()*1000))
                 tasks.put(dframe_template)
             counter += 1
@@ -265,7 +273,7 @@ class Klasa():
         for x in range(100):
             print("TEST ", x)
 
+
 if __name__ == '__main__':
     program = Klasa()
     program.MainWork()
-
