@@ -4,11 +4,12 @@ You can run Cosmic Watch and gather data to dedicated API by runing python3.6 Ru
 
 for more info run:
 ```
-python3.6 RunCosmic.py -h or RunCosmic -h
+python3.6 RunCosmic.py -h 
 ```
+
 For running code in python interpreter you need to install:
-	python 3.6+
-	python3-serial
+- python 3.6+
+- python3-serial
 
 If you can't read data form serial port you may have to change permissions or run CREDO Watch as a super user. 
 
